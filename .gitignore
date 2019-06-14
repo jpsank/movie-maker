@@ -1,0 +1,11 @@
+
+.DS_Store
+venv/
+.idea/
+
+input/
+
+*.mkv
+save.p
+
+
