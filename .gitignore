@@ -4,6 +4,7 @@ venv/
 .idea/
 
 input/
+output/
 
 *.mkv
 save.p
