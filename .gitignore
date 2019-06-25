@@ -6,7 +6,11 @@ venv/
 input/
 output/
 
+*.mp4
 *.mkv
 save.p
+*.p
+
+
 
 
