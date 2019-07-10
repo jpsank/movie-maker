@@ -10,22 +10,9 @@ from config import *
 import effects
 
 
-def group_list(l, n):
-    return [l[i:i+n] for i in range(0, len(l), n)]
-
-
-def constrain(n, low, high):
-    return high if n > high else low if n < low else n
-
-
 def execute_cmd(cmd):
     print("\t", "Executing command... >", cmd)
     return subprocess.call(cmd, shell=True)
-
-
-def print_adjust(columns, adjusts, end=None):
-    string = [("{:<%s}" % adjusts[i]).format(c) if i < len(adjusts) else c for i, c in enumerate(columns)]
-    print(''.join(string), end=end)
 
 
 class Clip:
@@ -90,13 +77,17 @@ class VideoClip(Clip):
 class Slide:
     def __init__(self, clip):
         self.clip = clip
-        self.duration = None
+        self.long = False
         self.effects = []
 
         self.i = 0
 
-    def add_effect(self, function):
-        self.effects.append(function)
+    def add_effect(self, effect):
+        self.effects.append(effect)
+
+    def set_effects_length(self, length):
+        for e in self.effects:
+            e.length = length
 
     def step(self):
         if self.clip.is_done():
@@ -113,7 +104,9 @@ class Slide:
 class SlideList:
     def __init__(self):
         self.slides = []
+        self.filters = []
 
+    # Magic methods
     def __len__(self):
         return len(self.slides)
 
@@ -126,7 +119,11 @@ class SlideList:
     def __setitem__(self, key, value):
         self.slides[key] = value
 
+    # Adding slides to list
     def add_file(self, path):
+        if not all(fil(path) for fil in self.filters):
+            return False
+
         ext = os.path.splitext(path)[1].lower()
         if ext == ".jpg" or ext == ".jpeg":
             self.add_image(path)
@@ -137,35 +134,9 @@ class SlideList:
         return True
 
     def add_image(self, path):
-        even = len(self.slides) % 2 == 0
-
         slide = Slide(ImageClip(path))
 
-        ratio = slide.clip.width/slide.clip.height
-        target_ratio = STORE_RES[0]/STORE_RES[1]
-        # image's proportions are wider than screen
-        if ratio > target_ratio:
-            slide.clip.im = effects.resize_img(slide.clip.im, height=STORE_RES[1])
-            if even:
-                slide.add_effect(effects.PanEffect(0,0, 1,0))
-            else:
-                slide.add_effect(effects.PanEffect(1,0, 0,0))
-        # image's proportions are taller than screen
-        elif ratio < target_ratio:
-            slide.clip.im = effects.resize_img(slide.clip.im, width=STORE_RES[0])
-            if even:
-                slide.add_effect(effects.PanEffect(0,0, 0,1))
-            else:
-                slide.add_effect(effects.PanEffect(0,1, 0,0))
-        # image has same proportions as screen
-        else:
-            slide.clip.im = effects.resize_img(slide.clip.im, width=STORE_RES[0], height=STORE_RES[1])
-            if even:
-                slide.add_effect(effects.PanEffect(0,0, random.random(),random.random()))
-                slide.add_effect(effects.ZoomEffect(1, 0.8))
-            else:
-                slide.add_effect(effects.PanEffect(random.random(),random.random(), 0,0))
-                slide.add_effect(effects.ZoomEffect(0.8, 1))
+        slide.clip.im = effects.constrain_img(slide.clip.im, STORE_RES)
 
         self.slides.append(slide)
 
@@ -177,8 +148,39 @@ class SlideList:
 
         self.slides.append(slide)
 
+    # Manipulating slides in list
+    def add_image_effects(self):
+        for idx, slide in enumerate(self.slides):
+            if isinstance(slide.clip, ImageClip):
+                even = idx % 2 == 0
+
+                wider, taller = effects.compare_proportions(slide.clip.width, slide.clip.height, STORE_RES)
+                slide.long = wider or taller
+                if wider:
+                    if even:
+                        slide.add_effect(effects.PanEffect(0, 0, 1, 0))
+                    else:
+                        slide.add_effect(effects.PanEffect(1, 0, 0, 0))
+                elif taller:
+                    if even:
+                        slide.add_effect(effects.PanEffect(0, 0, 0, 1))
+                    else:
+                        slide.add_effect(effects.PanEffect(0, 1, 0, 0))
+                else:
+                    if even:
+                        slide.add_effect(effects.PanEffect(0, 0, random.random(), random.random()))
+                        slide.add_effect(effects.ZoomEffect(1, 0.9))
+                    else:
+                        slide.add_effect(effects.PanEffect(random.random(), random.random(), 0, 0))
+                        slide.add_effect(effects.ZoomEffect(0.9, 1))
+
     def sort(self, key=lambda s: os.stat(s.clip.fp).st_birthtime, reverse=False):
         self.slides = sorted(self.slides, key=key, reverse=reverse)
+
+    # Filters
+
+    def add_filter(self, fil):
+        self.filters.append(fil)
 
 
 class Movie:
@@ -186,86 +188,75 @@ class Movie:
         self.slide_list = slide_list
         self.audio = AudioSegment.from_file(music_fp)
 
-    def export(self, video_out_fp, audio_out_fp, min_image_duration=0.3, min_long_img_duration=1, min_video_duration=2):
+    def export(self, video_out_fp, audio_out_fp):
         video_out = cv2.VideoWriter(video_out_fp, cv2.VideoWriter_fourcc(*'MJPG'), FPS, RESOLUTION)
-
         audio_out = self.audio
 
         ms_per_frame = 1/FPS * 1000  # seconds per frame * 1000 => milliseconds per frame
         len_music_ms = len(self.audio)
         loudness_threshold = self.audio.dBFS
 
-        def frame_to_ms(f):
-            return int(ms_per_frame*f)
-
-        start_frame = 0
-        current_frame = 0
+        done = False
         slide_idx = 0
-        while slide_idx < len(self.slide_list):
-            start_ms = frame_to_ms(start_frame)
+        ms = 0
+        while slide_idx < len(self.slide_list) and not done:
+            slide = self.slide_list[slide_idx]
 
-            current_ms = frame_to_ms(current_frame)
-            next_ms = frame_to_ms(current_frame+1)
+            # Determine minimum duration of slide
+            min_duration = 0
+            if isinstance(slide.clip, ImageClip):
+                if slide.long:
+                    min_duration = MIN_LONG_IMG_DURATION
+                else:
+                    min_duration = MIN_IMAGE_DURATION
+            elif isinstance(slide.clip, VideoClip):
+                if slide.clip.video is None:
+                    slide.clip.load()
+                min_duration = MIN_VIDEO_DURATION
+            if MIN_LAST_DURATION is not None and slide_idx == len(self.slide_list)-1:
+                min_duration = MIN_LAST_DURATION
+            min_duration = min_duration*1000
 
-            if next_ms >= len_music_ms:
-                print("\nReached the end of music sample")
-                break
+            print("{} {}/{}".format(slide.clip.fp, slide_idx+1, len(self.slide_list)))
 
-            # print("Getting loudness...")
-            current_loudness = self.audio[current_ms: next_ms].dBFS
+            # Determine actual duration of slide
+            duration = 0
+            frame_n = 0
+            while True:
+                frame_n += 1
+                duration += ms_per_frame
+                print("\t{} milliseconds".format(round(duration, ndigits=1)), end="\r")
 
-            current_slide = self.slide_list[slide_idx]
-            current_duration_ms = current_ms-start_ms
+                loudness = self.audio[ms+duration: ms+duration+ms_per_frame].dBFS
+                if duration >= min_duration and loudness > loudness_threshold:
+                    break
+                if ms+duration >= len_music_ms:
+                    done = True
+                    print("\nReached the end of music sample")
+                    break
+            print()
 
-            print_adjust(["{} {}/{}".format(current_slide.clip.fp, slide_idx+1, len(self.slide_list)),
-                          "{} seconds".format(round(current_duration_ms/1000, ndigits=1))],
-                         [80],
-                         end="\r")
+            # Write slide to output
+            slide.set_effects_length(frame_n)
+            for n in range(frame_n):
+                frame = slide.step()
+                video_out.write(frame)
+                if slide.clip.is_done():
+                    duration = n*ms_per_frame
+                    print("\tduration cut short to {} ms".format(round(duration, ndigits=1)))
+                    break
 
-            # print("Stepping slide...")
-            time_for_next = False
-            frame = None
-            current_clip = current_slide.clip
-            if isinstance(current_clip, ImageClip):
-                frame = current_slide.step()
-                if current_loudness > loudness_threshold:
-                    if True:
-                        if current_duration_ms > min_long_img_duration*1000:
-                            time_for_next = True
-                    else:
-                        if current_duration_ms > min_image_duration*1000:
-                            time_for_next = True
-            elif isinstance(current_clip, VideoClip):
-                if current_clip.video is None:
-                    current_clip.load()
-                frame = current_slide.step()
-                if current_clip.is_done():
-                    time_for_next = True
-                elif current_loudness > loudness_threshold and current_duration_ms > min_video_duration*1000:
-                    time_for_next = True
+            # Write slide audio to output
+            if isinstance(slide.clip, VideoClip) and slide.clip.has_audio():
+                audio_out = audio_out.overlay(slide.clip.audio[:duration], position=ms)
 
-            if frame is None:
-                raise Exception("Frame is invalid")
-            if frame.shape[:2][::-1] != RESOLUTION:
-                raise Exception("Frame is incorrect shape {}, should be {}".format(frame.shape[:2][::-1], RESOLUTION))
+            # Release slide data from memory
+            slide.clip.release()
 
-            # print("Writing frame... ")
-            video_out.write(frame)
-            # print("Done")
+            ms += duration
+            slide_idx += 1
 
-            if time_for_next:
-                # print("Moving to next slide...")
-                if isinstance(current_clip, VideoClip) and current_clip.has_audio():
-                    audio_out = audio_out.overlay(current_clip.audio[:current_duration_ms], position=start_ms)
-
-                current_clip.release()
-                start_frame = current_frame
-                slide_idx += 1
-
-                print()
-
-            current_frame += 1
-
+        audio_out = audio_out[:ms]
         video_out.release()
 
         audio_out.export(audio_out_fp)
@@ -287,14 +278,18 @@ else:
     print("Building slide data...")
 
     slide_list = SlideList()
+    # slide_list.add_filter(effects.ProximityFilter(slide_list))
 
-    files = list(os.listdir(INPUT_DIR))[:60]
+    files = list(os.listdir(INPUT_DIR))
     for i, file in enumerate(files):
         print(file, "{}/{}".format(i+1, len(files)))
         path = os.path.join(INPUT_DIR, file)
-        slide_list.add_file(path)
+        good = slide_list.add_file(path)
+        if not good:
+            print("\tfile not accepted")
 
     slide_list.sort()
+    slide_list.add_image_effects()
 
     print("Saving slide data...")
     with open(SAVE_FP, "wb") as f:

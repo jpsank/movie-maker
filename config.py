@@ -6,4 +6,13 @@ SAVE_FP = "save.p"  # pickle file to save preprocessed photos and videos so load
 RESOLUTION = (640, 480)  # resolution of final output
 STORE_RES = (800, 600)  # resolution to store images for processing (so zooming is full quality, etc)
 
-FPS = 30
+FPS = 30  # might make things weird if changed
+
+
+# Movie Parameters
+
+MIN_IMAGE_DURATION = 0.3
+MIN_LONG_IMG_DURATION = 1
+MIN_VIDEO_DURATION = 2
+MIN_LAST_DURATION = 4  # or None
+

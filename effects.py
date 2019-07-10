@@ -1,4 +1,5 @@
 
+import os
 from config import *
 import cv2
 
@@ -25,18 +26,28 @@ def zoom_img(im, scale):
     return res
 
 
-def constrain_img(im, max_width=None, max_height=None):
+def compare_proportions(width, height, resolution):
+    ratio = width / height
+    target_ratio = resolution[0] / resolution[1]
+
+    wider, taller = False, False
+    if ratio > target_ratio:
+        wider = True
+    elif ratio < target_ratio:
+        taller = True
+    return wider, taller
+
+
+def constrain_img(im, resolution):
     height, width = im.shape[:2]
 
-    if max_height is None:  # height not specified
-        max_height = (max_width / width) * height
-    elif max_width is None:  # width not specified
-        max_width = (max_height / height) * width
-
-    if max_width > width or max_height > height:
-        return im
-
-    return cv2.resize(im, (int(max_width), int(max_height)))
+    wider, taller = compare_proportions(width, height, resolution)
+    if wider:
+        return resize_img(im, height=resolution[1])
+    elif taller:
+        return resize_img(im, width=resolution[0])
+    else:
+        return resize_img(im, *resolution)
 
 
 def resize_img(im, width=None, height=None):
@@ -53,11 +64,13 @@ def resize_img(im, width=None, height=None):
 class Effect:
     def __init__(self):
         self.i = 0
-        self.speed = 0.01
+        self.length = 100  # length of effect in frames
 
-    def __call__(self, *args, **kwargs):
-        self.i += self.speed
-        if self.i > 1: self.i = 1
+    def update(self):
+        self.i += 1/self.length
+        self.i = 1 if self.i > 1 else self.i
+
+    def __call__(self, *args, **kwargs): pass
 
 
 class PanEffect(Effect):
@@ -66,7 +79,7 @@ class PanEffect(Effect):
         self.start_x, self.start_y, self.end_x, self.end_y = args
 
     def __call__(self, image):
-        super().__call__()
+        self.update()
         delta_pan_x = self.end_x - self.start_x
         pan_x = self.start_x + delta_pan_x * self.i
         delta_pan_y = self.end_y - self.start_y
@@ -81,7 +94,7 @@ class ZoomEffect(Effect):
         self.zoom_initial, self.zoom_final = args
 
     def __call__(self, image):
-        super().__call__()
+        self.update()
         delta_zoom = self.zoom_final - self.zoom_initial
         z = self.zoom_initial + delta_zoom * self.i
 
@@ -94,7 +107,7 @@ class ResizeEffect(Effect):
         self.width, self.height = width, height
 
     def __call__(self, image):
-        super().__call__()
+        self.update()
         return resize_img(image, self.width, self.height)
 
 
@@ -104,27 +117,40 @@ class CropEffect(Effect):
         self.x, self.y, self.width, self.height = args
 
     def __call__(self, image):
-        super().__call__()
+        self.update()
         return image[self.y:self.y+self.height, self.x:self.x+self.width]
 
 
 class ConstrainEffect(Effect):  # constrain image so that at least one of its dimensions matches those of movie
-    def __init__(self, res):
+    def __init__(self, resolution):
         super().__init__()
-        self.res = res
+        self.resolution = resolution
 
     def __call__(self, image):
-        super().__call__()
-        height, width = image.shape[:2]
+        self.update()
+        return constrain_img(image, self.resolution)
 
-        ratio = width / height
-        target_ratio = self.res[0] / self.res[1]
-        # image's proportions are wider than screen
-        if ratio > target_ratio:
-            return resize_img(image, height=self.res[1])
-        # image's proportions are taller than screen
-        elif ratio < target_ratio:
-            return resize_img(image, width=self.res[0])
-        # image has same proportions as screen
-        else:
-            return resize_img(image, *self.res)
+
+class Filter:
+    def __init__(self, parent):
+        self.parent = parent
+
+    def __call__(self, path):
+        return True
+
+
+class ProximityFilter(Filter):
+    def __init__(self, parent, margin=20):
+        super().__init__(parent)
+        self.margin = 20
+
+    def __call__(self, path):
+        if len(self.parent.slides) == 0:
+            return True
+
+        for slide in self.parent.slides:
+            stat1 = os.stat(path).st_birthtime
+            stat2 = os.stat(slide.clip.fp).st_birthtime
+            if abs(stat2-stat1) <= self.margin:
+                return False
+        return True
