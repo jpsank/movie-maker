@@ -57,6 +57,7 @@ class Effect:
 
     def __call__(self, *args, **kwargs):
         self.i += self.speed
+        if self.i > 1: self.i = 1
 
 
 class PanEffect(Effect):
