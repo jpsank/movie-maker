@@ -142,7 +142,7 @@ class Filter:
 class ProximityFilter(Filter):
     def __init__(self, parent, margin=20):
         super().__init__(parent)
-        self.margin = 20
+        self.margin = margin
 
     def __call__(self, path):
         if len(self.parent.slides) == 0:
@@ -154,3 +154,25 @@ class ProximityFilter(Filter):
             if abs(stat2-stat1) <= self.margin:
                 return False
         return True
+
+
+class BlurryFilter(Filter):
+    def __init__(self, parent, threshold=100):
+        super().__init__(parent)
+        self.threshold = threshold
+
+    def __call__(self, path):
+        ext = os.path.splitext(path)[1].lower()
+        if ext == ".jpg" or ext == ".jpeg":
+            image = cv2.imread(path)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            fm = variance_of_laplacian(gray)
+            if fm < self.threshold:
+                return False
+            return True
+        else:
+            return True
+
+
+def variance_of_laplacian(image):
+    return cv2.Laplacian(image, cv2.CV_64F).var()

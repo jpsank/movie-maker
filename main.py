@@ -278,7 +278,8 @@ else:
     print("Building slide data...")
 
     slide_list = SlideList()
-    # slide_list.add_filter(effects.ProximityFilter(slide_list))
+    slide_list.add_filter(effects.ProximityFilter(slide_list))
+    # slide_list.add_filter(effects.BlurryFilter(slide_list, threshold=300))
 
     files = list(os.listdir(INPUT_DIR))
     for i, file in enumerate(files):
