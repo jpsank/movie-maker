@@ -1,11 +1,14 @@
 
 .DS_Store
 venv/
+__pycache__/
 .idea/
 
 input/
 output/
 
+*.wav
+*.avi
 *.mkv
 save.p
 
