@@ -11,7 +11,7 @@ The output is one `.mkv` video file containing your new movie slideshow.
 ## Prerequisites
 This program has only been tested on macOS.
 
-You will need [FFmpeg](https://ffmpeg.org/) in order to run this program. You can install it with [Homebrew](https://brew.sh/):
+You will need [FFmpeg](https://ffmpeg.org/) in order to run this program. You can install it with [Homebrew](https://brew.sh/): `brew install ffmpeg`.
 
 You will need the python modules [scipy](https://www.scipy.org/install.html), [numpy](https://www.numpy.org/), [opencv](https://pypi.org/project/opencv-python/), and [pydub](https://github.com/jiaaro/pydub#installation) installed. You can install them by running `pipenv install` in the root directory of this project, or by running `pip install scipy numpy opencv-python pydub`.
 
