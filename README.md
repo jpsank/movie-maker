@@ -4,9 +4,9 @@ Generate movie slideshows of your photos and videos that intuitively integrate w
 ## About
 As input, the program takes:
 1. A folder containing all the photos (jpg, jpeg) and videos (mp4, mov).
-2. A list of sound files for the background music (mp3, etc.). These files are concatenated together to form the background music for the movie.
+2. A list of sound files for the background music (e.g. mp3). These files are concatenated together to form the background music for the movie.
 
-The output is one `.mkv` video file containing your new movie slideshow.
+The output is one video file (e.g. mp4, mkv) containing your new movie slideshow.
 
 ## Prerequisites
 This program has only been tested on macOS.
@@ -40,6 +40,7 @@ NOTE: The filepath inputs must be relative to their respective directories, spec
 - Photos and videos can be filtered in pre-processing to remove blurry images and videos, and to remove photos taken too near one another in time (i.e. burst photos).
 
 ## TODO
+- [ ] Prioritize photos and videos that are more interesting. For example, photos with **faces**, or photos that are more in focus, since sometimes the whole slideshow will be a bunch of random landscape photos. This could be done using a pre-trained neural network to detect faces, which would probably be easy with OpenCV.
 - [x] Add more options for filtering photos and videos, since photos exported from iCloud or Google Photos may not include the original creation date in their metadata. In this case, we need some way to filter photos to remove duplicates and burst photos. One way to do this is to read the image data and compare it to the previous image, and if the images are too similar, remove the current image. This would be very slow if done in pre-processing, so it might be better to do this in real-time as the movie is being created.
 - [ ] Add support for more file types, and for animated gifs.
 - [ ] Add transition effects between slides. For example, a fade-to-black, crossfade, blur, or rotation effect between slides.
