@@ -23,14 +23,13 @@ Usage: python -m app [OPTIONS]
   Main function for creating movie.
 
 Options:
-  -i, --inputdir TEXT   Directory of input images and videos.
-  -m, --music TEXT      List of music files to use.
-  -o, --out TEXT        File path for output video.
+  -i, --inputdir TEXT   Directory of input images and videos.  [required]
+  -m, --music TEXT      List of music files to use.  [required]
+  -o, --out TEXT        File path for output video.  [required]
   -w, --width INTEGER   Width of output video.
   -h, --height INTEGER  Height of output video.
   -f, --fps INTEGER     FPS of output video.
-  -n                    Cluster files by name.
-  -d                    Cluster files by date.
+  -d                    Cluster and order files by date.
 ```
 NOTE: The filepath inputs must be relative to their respective directories, specified in the `config.py` file.
 
@@ -41,7 +40,7 @@ NOTE: The filepath inputs must be relative to their respective directories, spec
 - Photos and videos can be filtered in pre-processing to remove blurry images and videos, and to remove photos taken too near one another in time (i.e. burst photos).
 
 ## TODO
-- [ ] Add more options for filtering photos and videos, since photos exported from iCloud or Google Photos may not include the original creation date in their metadata. In this case, we need some way to filter photos to remove duplicates and burst photos. One way to do this is to read the image data and compare it to the previous image, and if the images are too similar, remove the current image. This would be very slow if done in pre-processing, so it might be better to do this in real-time as the movie is being created.
+- [x] Add more options for filtering photos and videos, since photos exported from iCloud or Google Photos may not include the original creation date in their metadata. In this case, we need some way to filter photos to remove duplicates and burst photos. One way to do this is to read the image data and compare it to the previous image, and if the images are too similar, remove the current image. This would be very slow if done in pre-processing, so it might be better to do this in real-time as the movie is being created.
 - [ ] Add support for more file types, and for animated gifs.
 - [ ] Add transition effects between slides. For example, a fade-to-black, crossfade, blur, or rotation effect between slides.
 - [ ] More audio-visual effects? For example, panning and zoom speed could adjust to the beat of the music (would be kinda trippy).

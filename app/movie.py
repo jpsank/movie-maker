@@ -76,7 +76,9 @@ class Movie:
     fps: int = 30
 
     # Slide duration parameters
+    min_duration_similar: int = 100  # Minimum duration of similar image slides in ms
     min_duration_img: int = 300  # Minimum duration of slide in ms
+    max_duration_img: int = 10000  # Maximum duration of slide in ms
     min_duration_pan: int = 1000  # Minimum duration of panned slide in ms
     min_duration_video: int = 2000  # Minimum duration of video in ms
     min_duration_last: int = 4000  # Minimum duration of last slide in ms
@@ -85,7 +87,9 @@ class Movie:
     zoom_pct: float = 0.08  # Zoom percentage
     prepan_scale: float = 1.1  # Scale before panning
 
-    # TODO: Add transitions
+    # Remove duplicates parameters
+    remove_similarity: float = 0.5  # Similarity threshold for removing duplicates
+    similar_threshold: float = 0.3  # Similarity threshold for similar slides
 
     def export(self, path: str):
         """ Export movie to file. """
@@ -96,13 +100,25 @@ class Movie:
         
         # Set audio output
         music: AudioSegment = self.musics[music_idx := 0]
+        loudness_threshold = music.dBFS
 
         # Iterate through slides
         t = 0  # Time in ms
+        even = False
         for i, file in tqdm(enumerate(self.files), desc="Exporting", unit="slides", total=len(self.files)):
             file.load()  # Make sure file data is loaded
 
             if isinstance(file, ImageFile):
+                # Determine similarity to previous image
+                similar = False
+                if i > 0 and isinstance(last := self.files[i - 1], ImageFile):
+                    similarity = file.img.get_similarity(last.img)
+                    similar = similarity > self.similar_threshold
+
+                    # Skip if image is too similar to previous image
+                    if similarity > self.remove_similarity:
+                        continue
+
                 # We pan image in a certain direction if shape is different from movie shape
                 ratio = file.img.width / file.img.height
                 target_ratio = self.width / self.height
@@ -110,46 +126,47 @@ class Movie:
                 pan_y = ratio < target_ratio
 
                 # For panning/zooming
-                even = i % 2 == 0
+                even = not even
                 r1, r2 = random.random(), random.random()
 
-                # Determine minimum duration of image slide
-                min_duration = self.min_duration_pan if pan_x or pan_y else self.min_duration_img
+                # Determine minimum and max duration of image slide
+                min_duration = self.min_duration_similar if similar \
+                    else self.min_duration_pan if pan_x or pan_y else self.min_duration_img
+                max_duration = self.max_duration_img
             
             elif isinstance(file, VideoFile):
-                # Determine minimum duration of video slide
+                # Determine minimum and max duration of video slide
                 min_duration = self.min_duration_video
-                max_frames = file.get_frame_count()
+                max_duration = file.get_duration()  # Use video duration
+                if file.audio:
+                    # If video has audio, use audio duration (for redundancy)
+                    max_duration = min(max_duration, file.audio.duration_seconds * 1000)
             
-            # Last slide is usually longer than other slides
+            # Last slide is longer than other slides
             if i == len(self.files) - 1 and self.min_duration_last is not None:
                 min_duration = max(self.min_duration_last, min_duration)
             
-            # Determine actual duration of slide
-            n_frames = 0
-            duration_ms = 0
-            while True:                
-                if isinstance(file, VideoFile):
-                    # If we have reached maximum duration, stop
-                    if n_frames == max_frames or (file.audio and duration_ms >= file.audio.duration_seconds * 1000):
-                        break
+            # Determine actual duration of slide, in ms
+            duration = min_duration
+            while duration < max_duration:
+                # If next frame is at end of music, add next music
+                if t + duration + ms_per_frame > len(music):
+                    next_music = self.musics[music_idx := (music_idx + 1) % len(self.musics)]
+                    loudness_threshold = next_music.dBFS
+                    music += next_music
 
-                # If we have reached the end of the music sample, add next music sample
-                if t + duration_ms + ms_per_frame > len(music):
-                    music_idx += 1
-                    music += self.musics[music_idx % len(self.musics)]
-
-                # If we have reached minimum duration and a spike in loudness, stop
-                loudness = music[t + duration_ms: t + duration_ms + ms_per_frame].dBFS
-                if duration_ms >= min_duration and loudness > music.dBFS:
+                # If next frame is at a spike in loudness, break
+                segment = music[t + duration: t + duration + ms_per_frame]
+                if segment.dBFS > loudness_threshold:
                     break
 
-                n_frames += 1
-                duration_ms += ms_per_frame
+                duration += ms_per_frame
+            duration = min(duration, max_duration)  # Make sure duration is not too long
+            n_frames = int(duration // ms_per_frame)  # Number of frames in slide
             
             # Write slide to output
             start = t
-            for n in range(n_frames):
+            for n in tqdm(range(n_frames), desc=f"Writing {file.name}", unit="frames", leave=False):
                 # Get next frame
                 frame = next(file)
 

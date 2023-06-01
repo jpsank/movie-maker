@@ -100,6 +100,21 @@ class Image(np.ndarray):
     def get_var_of_laplacian(self) -> float:
         return cv2.Laplacian(self, cv2.CV_64F).var()
     
+    def matchTemplate_similarity(self, other: 'Image') -> float:
+        return np.max(cv2.matchTemplate(self, other, cv2.TM_CCOEFF_NORMED))
+    
+    def compare_hist(self, other: 'Image') -> float:
+        hist1 = cv2.calcHist([self], [0], None, [256], [0, 256])
+        hist2 = cv2.calcHist([other], [0], None, [256], [0, 256])
+        return cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
+
+    def get_similarity(self, other: 'Image') -> float:
+        me = self.resize(100, 100)
+        other = other.resize(100, 100)
+        s1 = me.matchTemplate_similarity(other)
+        s2 = me.compare_hist(other)
+        return (s1 + s2) / 2
+
     def save(self, path: str):
         cv2.imwrite(path, self)
 
@@ -199,8 +214,11 @@ class VideoFile(MediaFile):
     def get_frame_count(self):
         return self.capture.get(cv2.CAP_PROP_FRAME_COUNT)
 
-    def get_duration(self):
+    def get_duration_seconds(self):
         return self.get_frame_count() / self.fps
+    
+    def get_duration(self):
+        return self.get_duration_seconds() * 1000
 
 
 def is_image(path: str) -> bool:

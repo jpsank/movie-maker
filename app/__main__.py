@@ -16,15 +16,14 @@ from app.movie import *
 
 
 @click.command()
-@click.option("--inputdir", "-i", help="Directory of input images and videos.")
-@click.option("--music", "-m", multiple=True, help="List of music files to use.")
-@click.option("--out", "-o", help="File path for output video.")
+@click.option("--inputdir", "-i", required=True, help="Directory of input images and videos.")
+@click.option("--music", "-m", multiple=True, required=True, help="List of music files to use.")
+@click.option("--out", "-o", required=True, help="File path for output video.")
 @click.option("--width", "-w", default=640, help="Width of output video.")
 @click.option("--height", "-h", default=480, help="Height of output video.")
 @click.option("--fps", "-f", default=30, help="FPS of output video.")
-@click.option("-n", is_flag=True, help="Cluster files by name.")
-@click.option("-d", is_flag=True, help="Cluster files by date.")
-def main(inputdir, music, out, width, height, fps, n, d):
+@click.option("-d", is_flag=True, help="Cluster and order files by date.")
+def main(inputdir, music, out, width, height, fps, d):
     """ Main function for creating movie. """
 
     # Convert to absolute paths
@@ -41,21 +40,11 @@ def main(inputdir, music, out, width, height, fps, n, d):
         elif is_video(path):
             files.append(VideoFile(path))
         else:
-            print(f"Unknown file type: {path}")
+            print(f"Warning: Unknown file type: {path}")
     print(f"Total # of photos and videos: {len(files)}")
 
     # Load music files
     musics = [AudioSegment.from_file(path) for path in music]
-
-    if n:
-        # Sort and cluster files by name
-        files = sorted(files, key=lambda file: file.name)
-        clusters = [list(cluster) for _, cluster in groupby(files, lambda file: file.name[:-1])]
-        print(f"      # of clusters: {len(clusters)}")
-
-        # Choose representative files from each cluster
-        files = [file for cluster in clusters for file in choose_representatives(cluster)]
-        files = sorted(files, key=lambda file: file.creation_date)
 
     if d:
         # Sort and cluster files by date
@@ -64,6 +53,9 @@ def main(inputdir, music, out, width, height, fps, n, d):
 
         # Choose representative files from each cluster
         files = [file for cluster in clusters for file in choose_representatives(cluster)]
+    else:
+        # Sort files by name (assumes files are named sequentially)
+        files = sorted(files, key=lambda file: int(file.name))
 
     # Create movie object
     print(f"Final # of photos and videos: {len(files)}")
