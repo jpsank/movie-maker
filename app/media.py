@@ -211,13 +211,13 @@ class VideoFile(MediaFile):
         time = percent * self.get_duration()
         self.set_time(time)
     
-    def get_frame_count(self):
+    def get_frame_count(self) -> int:
         return self.capture.get(cv2.CAP_PROP_FRAME_COUNT)
 
-    def get_duration_seconds(self):
+    def get_duration_seconds(self) -> float:
         return self.get_frame_count() / self.fps
     
-    def get_duration(self):
+    def get_duration(self) -> float:
         return self.get_duration_seconds() * 1000
 
 
@@ -229,3 +229,6 @@ def is_video(path: str) -> bool:
     """ Return True if path is video file. """
     return os.path.isfile(path) and os.path.splitext(path)[1] in {".mp4", ".mov"}
 
+def is_audio(path: str) -> bool:
+    """ Return True if path is audio file. """
+    return os.path.isfile(path) and os.path.splitext(path)[1] in {".mp3", ".wav"}

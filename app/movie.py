@@ -109,42 +109,46 @@ class Movie:
             file.load()  # Make sure file data is loaded
 
             if isinstance(file, ImageFile):
-                # Determine similarity to previous image
-                similar = False
-                if i > 0 and isinstance(last := self.files[i - 1], ImageFile):
-                    similarity = file.img.get_similarity(last.img)
-                    similar = similarity > self.similar_threshold
-
-                    # Skip if image is too similar to previous image
-                    if similarity > self.remove_similarity:
-                        continue
-
+                # Initialize minimum and max duration of image slide
+                min_duration = self.min_duration_img
+                max_duration = self.max_duration_img
+                
                 # We pan image in a certain direction if shape is different from movie shape
                 ratio = file.img.width / file.img.height
                 target_ratio = self.width / self.height
                 pan_x = ratio > target_ratio
                 pan_y = ratio < target_ratio
+                if pan_x or pan_y:
+                    min_duration = min(min_duration, self.min_duration_pan)
 
                 # For panning/zooming
                 even = not even
                 r1, r2 = random.random(), random.random()
 
-                # Determine minimum and max duration of image slide
-                min_duration = self.min_duration_similar if similar \
-                    else self.min_duration_pan if pan_x or pan_y else self.min_duration_img
-                max_duration = self.max_duration_img
+                # Determine similarity to previous image
+                if i > 0 and isinstance(last := self.files[i - 1], ImageFile):
+                    similarity = file.img.get_similarity(last.img)
+
+                    # If image is similar to previous image, use minimum duration
+                    if similarity > self.similar_threshold:
+                        min_duration = min(min_duration, self.min_duration_similar)
+
+                    # Skip if image is too similar to previous image
+                    if similarity > self.remove_similarity:
+                        continue
             
             elif isinstance(file, VideoFile):
                 # Determine minimum and max duration of video slide
                 min_duration = self.min_duration_video
                 max_duration = file.get_duration()  # Use video duration
+
+                # If video has audio, use audio duration for redundancy
                 if file.audio:
-                    # If video has audio, use audio duration (for redundancy)
                     max_duration = min(max_duration, file.audio.duration_seconds * 1000)
             
             # Last slide is longer than other slides
-            if i == len(self.files) - 1 and self.min_duration_last is not None:
-                min_duration = max(self.min_duration_last, min_duration)
+            if i == len(self.files) - 1:
+                min_duration = max(min_duration, self.min_duration_last)
             
             # Determine actual duration of slide, in ms
             duration = min_duration
@@ -165,7 +169,7 @@ class Movie:
             
             # Write slide to output
             start = t
-            while t < start + duration and (frame := next(file)) is not None:
+            while t < start + duration and (frame := next(file, None)) is not None:
                 # Pan/zoom if image
                 if isinstance(file, ImageFile):
                     # Resize frame to contain slightly larger than movie resolution
