@@ -162,18 +162,10 @@ class Movie:
 
                 duration += ms_per_frame
             duration = min(duration, max_duration)  # Make sure duration is not too long
-            n_frames = int(duration // ms_per_frame)  # Number of frames in slide
             
             # Write slide to output
             start = t
-            for n in tqdm(range(n_frames), desc=f"Writing {file.name}", unit="frames", leave=False):
-                # Get next frame
-                frame = next(file)
-
-                # Break if no more frames
-                if frame is None:
-                    break
-
+            while t < start + duration and (frame := next(file)) is not None:
                 # Pan/zoom if image
                 if isinstance(file, ImageFile):
                     # Resize frame to contain slightly larger than movie resolution
@@ -181,7 +173,8 @@ class Movie:
                         int(self.width * self.prepan_scale), int(self.height * self.prepan_scale))
 
                     # Alternate going from 0 to 1 and 1 to 0
-                    pct = n / n_frames if even else 1 - n / n_frames
+                    pct = (t - start) / duration
+                    pct = pct if even else 1 - pct
                     if pan_x:
                         frame = frame.pan(pct, 0, self.width, self.height)
                     elif pan_y:
@@ -199,12 +192,11 @@ class Movie:
                 # Write frame to output and update time
                 videowriter.write(frame)
                 t += ms_per_frame
-                n += 1
             
             # If video, release video capture and overlay audio on music
             if isinstance(file, VideoFile):
                 file.capture.release()
-
+                
                 if file.audio:
                     segment = file.audio[0: t - start]
                     music = music.overlay(segment, position=start)
